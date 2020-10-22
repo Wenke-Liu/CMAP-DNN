@@ -61,7 +61,7 @@ class FC:
 
         # unpack handles for tensor ops to feed or fetch
         (self.x_in, self.y_in, 
-         self.dropout_, #self.bn_trn_,
+         self.dropout_,
          self.h_encoded, self.pred,
          self.cost, self.global_step, self.train_op, self.merged_summary) = handles
 
@@ -158,12 +158,12 @@ class FC:
         with tf.name_scope("l2_loss"):
             return tf.reduce_sum(tf.square(obs - actual), 1)
 
-    def inference(self,x):
+    def inference(self, x):
         """predict class from input"""
         feed_dict = {self.x_in:x}
         return self.sesh.run(self.pred, feed_dict=feed_dict)
     
-    def bottleneck(self,x):
+    def bottleneck(self, x):
         feed_dict = {self.x_in: x}
         return self.sesh.run('h2fc_drop_500/fully_connected/BiasAdd:0',feed_dict=feed_dict)
 
