@@ -13,11 +13,11 @@ import data_input
 """
 Global Variables
 """
-TST_FILE = None
+TST_FILE = '../data/final/sh_split3_data_tst.txt'
 ENS_DIR = None
-PROB_FILE = None
-OUTPUT = False
-PREFIX = 'test'
+PROB_FILE = '2020-10-21_split3_baseline_ensemble_probs.txt'
+OUTPUT = True
+PREFIX = 'baseline_split3'
 
 
 def make_ensemble(model_paths):
@@ -56,16 +56,18 @@ def get_prob(models, test_data, batch_size=64):
     return all_labels, all_probs
 
 
-def pred_rank(probs, y, n=5):
+def pred_rank(probs, y):
     """
     get the top-n performance from probabilities
     """
+    y = y.astype(int)
     lab_prob = probs[(range(y.shape[0]), y)]  # probability of the true class
-    prob_order = np.argsort(lab_prob, axis=1)  # order of the probabilities
+    prob_order = np.argsort(probs, axis=1)  # order of the probabilities
     prob_rank = np.argsort(prob_order, axis=1)  # rank of probs
     lab_rank = prob_rank[(range(y.shape[0]), y)]  # rank of the true class
+    lab_rank = probs.shape[1] - 1 - lab_rank  # descending rank
 
-    return lab_rank
+    return lab_prob, lab_rank
 
 
 def main():
@@ -86,16 +88,20 @@ def main():
         y_true, y_probs = get_prob(fc_ensemble, test)
 
     elif TST_FILE and PROB_FILE:
-        _, y_true = data_input.numpy_input(data_file=TST_FILE)
+        _, y_true = data_input.numpy_input(data_file=TST_FILE, skiprows=1)
+        print('Model prediction file: {}'.format(PROB_FILE))
         y_probs = data_input.iter_loadtxt(PROB_FILE, delimiter='\t')
+        print('Probabilities: {}'.format(y_probs.shape))
 
     else:
         sys.exit('Test file required.')
 
-    rank = pred_rank(y_probs, y_true, n=1)
+    y_true = y_true.astype(int)
+    _, rank = pred_rank(y_probs, y_true)
+
     rank1 = (rank < 1).astype(int)
     rank5 = (rank < 5).astype(int)
-
+    
     y_onehot = np.zeros((y_true.size, y_true.max() + 1))
     y_onehot[np.arange(y_true.size), y_true] = 1
 
@@ -106,21 +112,19 @@ def main():
     print('Rank 1 test accuracy: {}'.format(np.sum(rank1) / rank1.shape[0]), flush=True)
     print('Rank 5 test accuracy: {}'.format(np.sum(rank5) / rank5.shape[0]), flush=True)
 
-    pr = average_precision_score(y_onehot, y_scores)
+    pr = average_precision_score(y_onehot, y_scores, average=None)
+    print(pr.shape)
     print('Average PR (macro): {}'.format(np.mean(pr)))
     print('Average PR (micro): {}'.format(average_precision_score(y_onehot, y_scores, average='micro')))
 
-    roc = roc_auc_score(y_onehot, y_scores)
+    roc = roc_auc_score(y_onehot, y_scores, average=None)
     print('Average AU-ROC (macro): {}'.format(np.mean(roc)))
-    print('Average AU-ROC (macro): {}'.format(roc_auc_score(y_onehot, y_scores, average='micro')))
+    print('Average AU-ROC (micro): {}'.format(roc_auc_score(y_onehot, y_scores, average='micro')))
 
     if OUTPUT:
-        output = np.hstack((classes, rank, pr, roc))
-        np.savetxt(fname=datetime.now().isoformat()[0:10] + '_' + PREFIX + '_metrics.txt',
-                   X=output,
-                   delimiter='\t',
-                   comments='',
-                   header='y_true' + '\t' + 'rank' + '\t' + 'pr' + '\t' + 'roc')
+        output = pd.DataFrame({'y_true': classes,'apr': np.asarray(pr), 'auroc': np.asarray(roc) })
+        output.to_csv(datetime.now().isoformat()[0:10] + '_' + PREFIX + '_metrics.txt',
+                      sep='\t', index=False)
 
 
 if __name__ == "__main__":
